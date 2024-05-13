@@ -3,35 +3,40 @@ from pyshader import *
 import numpy as np
 import kp
 from pyshader.stdlib import exp, log
+import plotly.express as px
 
+
+
+Pixel = ps.Struct(
+    x=ps.u8,
+    y=ps.u8,
+    color = ps.vec3
+)
+
+Texture = ps.Array(ps.vec3)
 
 @ps.python2shader
 def compute_shader(
         index=("input", "GlobalInvocationId", ps.ivec3),
-        in_a: np.ndarray = ("buffer", 0, ps.Array(ps.f32)),
-        in_b: np.ndarray=("buffer", 1, ps.Array(ps.f32)),
-        out_a: np.ndarray=("buffer", 2, ps.Array(ps.f32)),
-        out_b: np.ndarray=("buffer", 3, ps.Array(ps.f32)),
+        tex_size=("uniform", 0, ps.ivec2),
+        out_tex=("buffer", 1, ps.Array(ps.vec3))
 ):
-    i = index.x
+    color = vec3(f32(index.x), f32(index.y), 0.0)
+    uid = index.x * tex_size[0] + index.y
+    out_tex[uid] = color
 
-    out_a[i] = in_a[i] * 5.0
-    out_b[i] = in_b[i]
+
 
 
 def test_logistic_regression():
     mgr = kp.Manager(0)
+    workgroup = (*tex_size, 1)
 
     # First we create input and ouput tensors for shader
-    tensor_in_a = mgr.tensor(np.array([0, 1, 2, 3, 4], dtype=np.float32))
-    tensor_in_b = mgr.tensor(np.array([4, 3, 2, 1, 0], dtype=np.float32))
-    tensor_out_a = mgr.tensor(np.array([0, 0, 0, 0, 0], dtype=np.float32))
-    tensor_out_b = mgr.tensor(np.array([0, 0, 0, 0, 0], dtype=np.float32))
+    tensor_in_a = mgr.tensor(np.array(tex_size, dtype=np.int32))
+    tensor_out_a = mgr.tensor(np.zeros((*tex_size,3), dtype=np.float32))
 
-    tensor_push_a = mgr.tensor(np.array([10, 11, 12, 13, 14], dtype=np.float32))
-
-    # We store them in an array for easier interaction
-    params = [tensor_in_a, tensor_in_b, tensor_out_a, tensor_out_b]
+    params = [tensor_in_a ,tensor_out_a]
 
     mgr.sequence().eval(kp.OpTensorSyncDevice(params))
 
@@ -39,25 +44,28 @@ def test_logistic_regression():
     sq = mgr.sequence()
 
     # Record operation to sync memory from local to GPU memory
-    sq.record(kp.OpTensorSyncDevice([tensor_push_a]))
+    # sq.record(kp.OpTensorSyncDevice([tensor_push_a]))
 
     # Record operation to execute GPU shader against all our parameters
-    sq.record(kp.OpAlgoDispatch(mgr.algorithm(params, compute_shader.to_spirv())))
+    sq.record(kp.OpAlgoDispatch(mgr.algorithm(params, compute_shader.to_spirv(), workgroup)))
 
     # Record operation to sync memory from GPU to local memory
-    sq.record(kp.OpTensorSyncLocal([tensor_out_a, tensor_out_b]))
+    sq.record(kp.OpTensorSyncLocal([tensor_out_a]))
 
-    ITERATIONS = 1
+    sq.eval()
 
-    # Perform machine learning training and inference across all input X and Y
-    for i_iter in range(ITERATIONS):
-        # Execute an iteration of the algorithm
-        sq.eval()
+    out_data:np.ndarray = tensor_out_a.data()
 
-        print(tensor_out_a.data())
-        print(tensor_out_b.data())
+    out_data = np.reshape(out_data, (*tex_size, 3))
+
+    px.imshow(out_data).show()
+
+
+    print(tensor_out_a.data().shape)
+    print(tensor_out_a.data())
 
 
 if __name__ == "__main__":
+    tex_size = (5,5)
     test_logistic_regression()
     print("All tests passed!")
