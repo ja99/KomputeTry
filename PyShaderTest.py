@@ -18,12 +18,15 @@ Texture = ps.Array(ps.vec3)
 @ps.python2shader
 def compute_shader(
         index=("input", "GlobalInvocationId", ps.ivec3),
-        tex_size=("uniform", 0, ps.ivec2),
-        out_tex=("buffer", 1, ps.Array(ps.vec3))
+        in_tex_size=("buffer", 0, ps.Array(ps.f32)),
+        # out_tex=("buffer", 1, ps.Array(ps.vec3))
+        out_tex=("buffer", 1, ps.Array(ps.f32))
 ):
-    color = vec3(f32(index.x), f32(index.y), 0.0)
-    uid = index.x * tex_size[0] + index.y
+    # color = vec3(f32(index.x), f32(index.y), 0.0)
+    color = f32(index.x) + f32(index.y)
+    uid = index.x * i32(in_tex_size[0]) + index.y
     out_tex[uid] = color
+
 
 
 
@@ -33,8 +36,10 @@ def test_logistic_regression():
     workgroup = (*tex_size, 1)
 
     # First we create input and ouput tensors for shader
-    tensor_in_a = mgr.tensor(np.array(tex_size, dtype=np.int32))
-    tensor_out_a = mgr.tensor(np.zeros((*tex_size,3), dtype=np.float32))
+    tensor_in_a = mgr.tensor(np.array(tex_size, dtype=np.float32))
+
+    # tensor_out_a = mgr.tensor(np.zeros((*tex_size,3), dtype=np.float32))
+    tensor_out_a = mgr.tensor(np.zeros((tex_size[0]*tex_size[1],), dtype=np.float32))
 
     params = [tensor_in_a ,tensor_out_a]
 
@@ -56,8 +61,10 @@ def test_logistic_regression():
 
     out_data:np.ndarray = tensor_out_a.data()
 
-    out_data = np.reshape(out_data, (*tex_size, 3))
+    # out_data = np.reshape(out_data, (*tex_size, 3))
+    out_data = np.reshape(out_data, tex_size)
 
+    # px.imshow(out_data).show()
     px.imshow(out_data).show()
 
 
