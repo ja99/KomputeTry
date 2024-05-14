@@ -40,7 +40,7 @@ def test_logistic_regression():
     tensor_in_a = mgr.tensor(np.array(tex_size, dtype=np.float32))
 
     # tensor_out_a = mgr.tensor(np.zeros((*tex_size,3), dtype=np.float32))
-    tensor_out_a = mgr.tensor(np.zeros((tex_size[0] * tex_size[1] * 3,), dtype=np.float32))
+    tensor_out_a = mgr.tensor(np.zeros((*tex_size, 3), dtype=np.float32))
 
     params = [tensor_in_a, tensor_out_a]
 

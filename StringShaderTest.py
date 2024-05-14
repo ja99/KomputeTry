@@ -17,47 +17,51 @@ def kompute(shader: Path):
 
     # 2. Create and initialise Kompute Tensors through manager
 
-    # Default tensor constructor simplifies creation of float values
-    tensor_in_a = mgr.tensor([2, 2, 2])
-    tensor_in_b = mgr.tensor([1, 2, 3])
-    # Explicit type constructor supports uint32, int32, double, float and bool
-    tensor_out_a = mgr.tensor_t(np.array([0, 0, 0], dtype=np.uint32))
-    tensor_out_b = mgr.tensor_t(np.array([0, 0, 0], dtype=np.uint32))
+    # Define your spheres and query point
+    spheres = np.array([
+        [1.0, 2.0, 3.0, 1.0],  # Sphere with position (1,2,3) and radius 1
+        [4.0, 5.0, 6.0, 2.0],  # Sphere with position (4,5,6) and radius 2
+        [0.0, 0.0, 1.0, 0.5],
+    ], dtype=np.float32)
 
-    params = [tensor_in_a, tensor_in_b, tensor_out_a, tensor_out_b]
+    # Query point
+    query_point = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+
+    # Default tensor constructor simplifies creation of float values
+    tensor_spheres = mgr.tensor(spheres)
+    tensor_output = mgr.tensor(np.inf)  # For storing the result
+
+    params = [tensor_spheres, tensor_output]
+
 
     # 3. Create algorithm based on shader (supports buffers & push/spec constants)
-    workgroup = (3, 1, 1)
-    spec_consts = [2]
-    push_consts_a = [2]
-    push_consts_b = [3]
+    workgroup = (spheres.shape[0], 1, 1)
+    spec_consts = []
+    push_consts = query_point
 
     # See documentation shader section for compile_source
     compiled_shader = compile_source(shader)
 
-    algo = mgr.algorithm(params, compiled_shader, workgroup, spec_consts, push_consts_a)
+    algo = mgr.algorithm(params, compiled_shader, workgroup, spec_consts, push_consts)
 
     # 4. Run operation synchronously using sequence
     (mgr.sequence()
      .record(kp.OpTensorSyncDevice(params))
      .record(kp.OpAlgoDispatch(algo))  # Binds default push consts provided
+     .record(kp.OpTensorSyncLocal(params))
      .eval()  # evaluates the two recorded ops
-     .record(kp.OpAlgoDispatch(algo, push_consts_b))  # Overrides push consts
-     .eval() # evaluates the two recorded ops
      )
 
-    # 5. Sync results from the GPU asynchronously
-    sq = mgr.sequence()
-    sq.eval_async(kp.OpTensorSyncLocal(params))
+    # # 5. Sync results from the GPU asynchronously
+    # sq = mgr.sequence()
+    # sq.eval_async(kp.OpTensorSyncLocal(params))
+    #
+    # # ... Do other work asynchronously whilst GPU finishes
+    #
+    # sq.eval_await()
 
-    # ... Do other work asynchronously whilst GPU finishes
+    print(tensor_output.data())
 
-    sq.eval_await()
-
-    # Prints the first output which is: { 4, 8, 12 }
-    print(tensor_out_a.data())
-    # Prints the first output which is: { 10, 10, 10 }
-    print(tensor_out_b.data())
 
 
 if __name__ == "__main__":
